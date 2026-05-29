@@ -1,1 +1,11 @@
-data/pathmnist_64.npz
+# ignorowanir folderu data ze zbiorem danych
+data/
+
+# ignorowanie plików tymczawowych Pythona i środowiska
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.venv/
+venv/
+ENV/
