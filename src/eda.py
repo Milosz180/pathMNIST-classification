@@ -105,9 +105,12 @@ def plot_brightness_boxplot(images, labels, save_dir):
     
     # lista etykiet dla klas
     formatted_labels = [CLASS_NAMES[lbl] for lbl in labels]
+
+    # odwrócenie kolejności wyświetlania dla zachowania spójności
+    explicit_order = [CLASS_NAMES[i] for i in range(9)]
     
     # rysowanie boxplotu
-    sns.boxplot(x=mean_brightness, y=formatted_labels, palette="Spectral")
+    sns.boxplot(x=mean_brightness, y=formatted_labels, order=explicit_order, palette="Spectral")
     
     plt.title("Analiza statystyczna jasności próbek w podziale na klasy tkankowe", fontsize=14, pad=15)
     plt.xlabel("Średnia jasność pikseli (0 - Czarny, 255 - Biały)", fontsize=12)
@@ -140,8 +143,8 @@ def plot_pca_separation(images, labels, save_dir):
     plt.figure(figsize=(12, 8))
     sns.set_style("white")
     
-    # paleta 9 wyraźnych kolorów
-    colors = sns.color_palette("Set1", n_colors=9)
+    # paleta 9 kolorów jak w box-plocie
+    custom_spectral_colors = sns.color_palette("Spectral", n_colors=9)
     
     for cls in range(9):
         cls_mask = (sampled_labels == cls)
@@ -152,7 +155,7 @@ def plot_pca_separation(images, labels, save_dir):
             alpha=0.6,
             edgecolors='none',
             s=25,
-            color=colors[cls]
+            color=custom_spectral_colors[cls]
         )
         
     plt.title("Wizualizacja przestrzeni cech PathMNIST za pomocą PCA (2D)", fontsize=14, pad=15)
@@ -181,8 +184,8 @@ def run_eda():
     train_labels = data['train_labels'].squeeze()
     
     # analizy wizualne
-    plot_sample_gallery(train_images, train_labels, results_dir) # wywołanie próbek graficznych dla klas
-    plot_rgb_intensity_distribution(train_images, results_dir) # wywołanie dystrybucjki RGB
+    #plot_sample_gallery(train_images, train_labels, results_dir) # wywołanie próbek graficznych dla klas
+    #plot_rgb_intensity_distribution(train_images, results_dir) # wywołanie dystrybucjki RGB
     plot_brightness_boxplot(train_images, train_labels, results_dir) # wywołanie boxplotu jasności
     plot_pca_separation(train_images, train_labels, results_dir) # seraracja PCA
     print("\n[SUKCES] Wszystkie wizualizacje EDA zostały wygenerowane i zapisane w folderze 'reports/eda/'.")
