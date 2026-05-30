@@ -5,22 +5,9 @@ import torch
 from torch.utils.data import Dataset, DataLoader
 from torchvision import transforms
 from PIL import Image
-
-# globalny random state
-GLOBAL_SEED = 42
-
-def set_seed(seed=GLOBAL_SEED):
-    # stałe ziarno losowości dla wszystkich bibliotek
-    random.seed(seed)
-    np.random.seed(seed)
-    torch.manual_seed(seed)
-    torch.cuda.manual_seed(seed)
-    torch.cuda.manual_seed_all(seed)
-    torch.backends.cudnn.deterministic = True
-    torch.backends.cudnn.benchmark = False
-
+# import global seeda
+from src.config import GLOBAL_SEED, set_seed 
 set_seed()
-
 
 # klasa datasetu
 class PathMNIST64Dataset(Dataset):
@@ -78,6 +65,11 @@ def load_and_prepare_data():
     train_images, train_labels = data['train_images'], data['train_labels']
     val_images, val_labels = data['val_images'], data['val_labels']
     test_images, test_labels = data['test_images'], data['test_labels']
+
+    # sprawdzenie kompletności danych
+    assert not np.isnan(train_images).any(), "Wykryto wartości NaN w zbiorze treningowym!"
+    assert not np.isnan(val_images).any(), "Wykryto wartości NaN w zbiorze walidacyjnym!"
+    assert not np.isnan(test_images).any(), "Wykryto wartości NaN w zbiorze testowym!"
     
     # wyświetlanie balansu klas
     print_class_balance(train_labels, "Treningowy (Train)")

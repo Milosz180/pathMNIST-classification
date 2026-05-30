@@ -3,6 +3,9 @@ import numpy as np
 import matplotlib.pyplot as plt
 import seaborn as sns
 from sklearn.decomposition import PCA
+# import global seeda
+from src.config import GLOBAL_SEED, set_seed 
+set_seed()
 
 # słownik z pełnymi nazwami
 CLASS_NAMES = {
@@ -26,7 +29,7 @@ def plot_sample_gallery(images, labels, save_dir):
     fig, axes = plt.subplots(num_classes, samples_per_class, figsize=(10, 20))
     
     # stały seed
-    np.random.seed(42)
+    np.random.seed(GLOBAL_SEED)
     
     for cls in range(num_classes):
         # indeksy dla danej kalsy
@@ -56,7 +59,7 @@ def plot_rgb_intensity_distribution(images, save_dir):
     print("Analiza rozkładu intensywności pikseli w kanałach RGB...")
     
     # pobieranie losowej próbki 5000 obrazów
-    np.random.seed(42)
+    np.random.seed(GLOBAL_SEED)
     sample_indices = np.random.choice(len(images), min(5000, len(images)), replace=False)
     sampled_images = images[sample_indices]
     
@@ -126,7 +129,7 @@ def plot_pca_separation(images, labels, save_dir):
     print("Generowanie analizy redukcji wymiarowości PCA...")
     
     # losowa próbka 3000 próbek dla czytelności
-    np.random.seed(42)
+    np.random.seed(GLOBAL_SEED)
     sample_indices = np.random.choice(len(images), min(3000, len(images)), replace=False)
     sampled_images = images[sample_indices]
     sampled_labels = labels[sample_indices]
@@ -136,7 +139,7 @@ def plot_pca_separation(images, labels, save_dir):
     flattened_images = sampled_images.reshape(num_samples, -1)
     
     # PCA do 2 głównych składowych
-    pca = PCA(n_components=2, random_state=42)
+    pca = PCA(n_components=2, random_state=GLOBAL_SEED)
     pca_results = pca.fit_transform(flattened_images)
     
     # rysowanie wykresu
@@ -172,6 +175,8 @@ def plot_pca_separation(images, labels, save_dir):
     print(f"[ZAPISANO] Wykres rzutowania PCA: {output_path}")
 
 def run_eda():
+    # globalny seed
+    set_seed(GLOBAL_SEED)
     # ścieżki wyjściowe
     base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     data_path = os.path.join(base_dir, "data", "pathmnist_64.npz")
