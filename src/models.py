@@ -94,22 +94,18 @@ class MobileNetV3Transfer(nn.Module):
         return self.model(x)
 
 
-class VisionTransformerTransfer(nn.Module):
-   # sota vision trasnformer
+class DenseNetTransfer(nn.Module):
+    # metoda Advanced Sota
     def __init__(self, num_classes=9, pretrained=True):
-        super(VisionTransformerTransfer, self).__init__()
-        weights = models.ViT_B_16_Weights.DEFAULT if pretrained else None
-        self.model = models.vit_b_16(weights=weights)
+        super(DenseNetTransfer, self).__init__()
+        weights = models.DenseNet121_Weights.DEFAULT if pretrained else None
+        self.model = models.densenet121(weights=weights)
         
-        # warstwa interpolacyjna podnosząca rozdzielczość 64x64 do wymaganej 224x224
-        self.upsample = nn.Upsample(size=(224, 224), mode='bilinear', align_corners=False)
-        
-        # podmiana liniowej głowy klasyfikacyjnej (heads)
-        num_features = self.model.heads.head.in_features
-        self.model.heads.head = nn.Linear(num_features, num_classes)
+        # podmiara klasyfikatora końcowego pod 9 klas
+        num_features = self.model.classifier.in_features
+        self.model.classifier = nn.Linear(num_features, num_classes)
 
     def forward(self, x):
-        x = self.upsample(x)
         return self.model(x)
 
 
@@ -121,7 +117,7 @@ def model_factory(model_name, num_classes=9, pretrained=True):
         'ResNet18':           lambda: ResNet18Transfer(num_classes=num_classes, pretrained=pretrained),
         'ResNet50':           lambda: ResNet50Transfer(num_classes=num_classes, pretrained=pretrained),
         'MobileNetV3':        lambda: MobileNetV3Transfer(num_classes=num_classes, pretrained=pretrained),
-        'VisionTransformer':  lambda: VisionTransformerTransfer(num_classes=num_classes, pretrained=pretrained)
+        'DenseNet121':        lambda: DenseNetTransfer(num_classes=num_classes, pretrained=pretrained)
     }
     
     if model_name in models_map:
@@ -133,7 +129,7 @@ def model_factory(model_name, num_classes=9, pretrained=True):
 if __name__ == "__main__":
     print("=== Test poprawności alokacji wymiarów modeli ===")
     mock_input = torch.randn(2, 3, 64, 64) # 2 testowe obrazów 64x64
-    names = ['LogisticRegression', 'SimpleCNN', 'ResNet18', 'ResNet50', 'MobileNetV3', 'VisionTransformer']
+    names = ['LogisticRegression', 'SimpleCNN', 'ResNet18', 'ResNet50', 'MobileNetV3', 'DenseNet121']
     
     for name in names:
         try:
