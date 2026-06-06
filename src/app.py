@@ -80,6 +80,7 @@ class MEdicalCADxApp(QMainWindow):
         super().__init__()
         self.setWindowTitle("Klasyfikacja PathMNIST") # nazwa okna
         self.resize(1250, 800)
+        self.setMinimumSize(1024, 720)
 
         base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
         self.model_path = os.path.join(base_dir, "models", "final_model", "mobilenetv3_final_optimized.pth")
@@ -419,7 +420,7 @@ if __name__ == "__main__":
     app = QApplication(sys.argv)
     app.setStyle('Fusion')
     gui = MEdicalCADxApp()
-    gui.show()
+    gui.showMaximized()
     
     try:
         sys.exit(app.exec())
