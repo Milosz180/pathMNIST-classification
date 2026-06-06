@@ -16,4 +16,3 @@ models/MobileNetV3_screening_best.pth
 models/LogisticRegression_screening_best.pth
 models/DenseNet121_screening_best.pth
 models/final_model/mobilenetv3_final_optimized.pth
-src/app.py

@@ -1,0 +1,293 @@
+import os
+import json
+import numpy as np
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
+from torchvision import transforms
+from PIL import Image
+# import biblioteki PyQt6
+from PyQt6.QtWidgets import (QApplication, QMainWindow, QWidget, QPushButton, 
+                             QLabel, QFileDialog, QSlider, QVBoxLayout, 
+                             QHBoxLayout, QFrame, QSplitter)
+from PyQt6.QtGui import QPixmap, QImage, QFont, QCursor
+from PyQt6.QtCore import Qt
+import cv2
+import matplotlib.pyplot as plt
+from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg as FigureCanvas
+
+# import fabryki modeli
+from src.models import model_factory
+
+DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+# słownik mapowania klas - każda klasa posiada własny kolor
+CLASS_MAPPING = {
+    0: {"name": "Tkanka tłuszczowa (Adipose)", "status": "Prawidłowa / Bez zmian", "color": "#27ae60", "is_patho": False}, # Ciemna zieleń
+    1: {"name": "Tło preparatu (Background)", "status": "Neutralny", "color": "#7f8c8d", "is_patho": False},  # Szary
+    2: {"name": "Gęste podścielisko nowotworowe (Cancer-associated stroma)", "status": "PATOLOGIA / ALARM", "color": "#d35400", "is_patho": True}, # Ciemny pomarańcz
+    3: {"name": "Nacieki limfocytarne (Lymphocytes)", "status": "PATOLOGIA / MONITORUJ", "color": "#8e44ad", "is_patho": True}, # Fiolet
+    4: {"name": "Gruczoły jelitowe prawidłowe (Mucosa)", "status": "Prawidłowa / Bez zmian", "color": "#2ecc71", "is_patho": False}, # Jasna zieleń
+    5: {"name": "Gruczolak / Rak gruczołowy (Adenocarcinoma)", "status": "KRYTYCZNY / NOWOTWÓR", "color": "#c0392b", "is_patho": True}, # Intensywna czerwień
+    6: {"name": "Tkanka limfoidalna (Lymphoid tissue)", "status": "Prawidłowa / Bez zmian", "color": "#16a085", "is_patho": False}, # Morska zieleń
+    7: {"name": "Mięśniówka gładka (Smooth muscle)", "status": "Prawidłowa / Bez zmian", "color": "#2980b9", "is_patho": False}, # Niebieski
+    8: {"name": "Prawidłowa śluzówka jelita (Normal colon mucosa)", "status": "Prawidłowa / Bez zmian", "color": "#1abc9c", "is_patho": False} # Turkus
+}
+
+# klasa silnika Grad-CAM
+class GradCAMEngine:
+    def __init__(self, model, target_layer):
+        self.model = model
+        self.target_layer = target_layer
+        self.gradients = None
+        self.activations = None
+        
+        self.target_layer.register_forward_hook(self.save_activation)
+        self.target_layer.register_backward_hook(self.save_gradient)
+
+    def save_activation(self, module, input, output):
+        self.activations = output.detach()
+
+    def save_gradient(self, module, grad_input, grad_output):
+        self.gradients = grad_output[0].detach()
+
+    def generate(self, input_tensor, target_class):
+        self.model.zero_grad()
+        output = self.model(input_tensor)
+        loss = output[0, target_class]
+        loss.backward()
+
+        weights = torch.mean(self.gradients, dim=(2, 3), keepdim=True)
+        cam = torch.sum(weights * self.activations, dim=1).squeeze(0)
+        cam = np.maximum(cam.cpu().numpy(), 0)
+        
+        if np.max(cam) != 0:
+            cam = cam / np.max(cam)
+            
+        return cam, output
+
+# główne okno aplikacji desktopowej
+class MEdicalCADxApp(QMainWindow):
+    def __init__(self):
+        super().__init__()
+        self.setWindowTitle("Klasyfikacja PathMNIST") # nazwa okna
+        self.resize(1200, 780)
+        
+        base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        self.model_path = os.path.join(base_dir, "models", "final_model", "mobilenetv3_final_optimized.pth")
+        self.thresholds_path = os.path.join(base_dir, "models", "final_model", "medical_thresholds.json")
+        
+        self.orig_cv_img = None
+        self.heatmap_cv_img = None
+        self.input_tensor = None
+        
+        self.load_medical_backend()
+        self.init_ui()
+
+    def load_medical_backend(self):
+        with open(self.thresholds_path, "r") as f:
+            self.thresholds = {int(k): v for k, v in json.load(f).items()}
+            
+        self.model = model_factory('MobileNetV3', num_classes=9, pretrained=False)
+        self.model.load_state_dict(torch.load(self.model_path, map_location=DEVICE))
+        self.model = self.model.to(DEVICE)
+        self.model.eval()
+        
+        target_layer = [m for m in self.model.modules() if isinstance(m, nn.Conv2d)][-1]
+        self.cam_engine = GradCAMEngine(self.model, target_layer)
+        
+        self.transform = transforms.Compose([
+            transforms.Resize((64, 64)),
+            transforms.ToTensor(),
+            transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
+        ])
+
+    def init_ui(self):
+        main_widget = QWidget()
+        self.setCentralWidget(main_widget)
+        main_layout = QHBoxLayout(main_widget)
+        
+        splitter = QSplitter(Qt.Orientation.Horizontal)
+        main_layout.addWidget(splitter)
+        
+        # panel lewy -przycisk, wczytywany obraz, nazwa pliku i suwak
+        left_panel = QWidget()
+        left_layout = QVBoxLayout(left_panel)
+        
+        self.btn_load = QPushButton("Wczytaj obraz histopatologiczny")
+        self.btn_load.setFont(QFont("Arial", 11, QFont.Weight.Bold))
+        self.btn_load.setFixedHeight(45)
+        self.btn_load.setCursor(QCursor(Qt.CursorShape.PointingHandCursor)) # kursor rączki
+        self.btn_load.clicked.connect(self.open_file_dialog)
+        left_layout.addWidget(self.btn_load)
+        
+        self.view_label = QLabel("Proszę wczytać zdjęcie tkanki bioptatu...")
+        self.view_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.view_label.setFrameStyle(QFrame.Shape.StyledPanel | QFrame.Shadow.Sunken)
+        self.view_label.setMinimumSize(400, 400)
+        left_layout.addWidget(self.view_label)
+        
+        # nazwa wczytywanego pliku
+        self.lbl_file_name = QLabel("")
+        self.lbl_file_name.setFont(QFont("Arial", 10, QFont.Weight.Medium))
+        self.lbl_file_name.setStyleSheet("color: #555555; margin-top: 2px; margin-bottom: 5px;")
+        self.lbl_file_name.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        left_layout.addWidget(self.lbl_file_name)
+        
+        slider_layout = QHBoxLayout()
+        slider_layout.addWidget(QLabel("Tkanka (0%)"))
+        self.alpha_slider = QSlider(Qt.Orientation.Horizontal)
+        self.alpha_slider.setRange(0, 100)
+        self.alpha_slider.setValue(0) 
+        self.alpha_slider.setEnabled(False)
+        self.alpha_slider.setCursor(QCursor(Qt.CursorShape.PointingHandCursor)) # kursor rączki
+        self.alpha_slider.valueChanged.connect(self.update_blend_view)
+        slider_layout.addWidget(self.alpha_slider)
+        slider_layout.addWidget(QLabel("Grad-CAM (100%)"))
+        left_layout.addLayout(slider_layout)
+        
+        splitter.addWidget(left_panel)
+        
+        # panel prawy - wynik, diagnoza i wykres
+        right_panel = QWidget()
+        right_layout = QVBoxLayout(right_panel)
+        
+        self.result_frame = QFrame()
+        self.result_frame.setFrameShape(QFrame.Shape.StyledPanel)
+        self.result_frame.setStyleSheet("background-color: #f1f2f6; border: 1px solid #ced6e0; border-radius: 8px;")
+        rf_layout = QVBoxLayout(self.result_frame)
+        
+        # ciemniejszy kolor
+        self.lbl_class_title = QLabel("DIAGNOZA: Oczekiwanie na badanie...")
+        self.lbl_class_title.setFont(QFont("Arial", 13, QFont.Weight.Bold))
+        self.lbl_class_title.setStyleSheet("color: #2f3542;") 
+        self.lbl_class_title.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        rf_layout.addWidget(self.lbl_class_title)
+        
+        self.lbl_status = QLabel("Status kliniczny: -")
+        self.lbl_status.setFont(QFont("Arial", 11, QFont.Weight.Medium))
+        self.lbl_status.setStyleSheet("color: #57606f;") 
+        self.lbl_status.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        rf_layout.addWidget(self.lbl_status)
+        
+        right_layout.addWidget(self.result_frame)
+        
+        self.fig, self.ax = plt.subplots(figsize=(5, 5), dpi=100)
+        self.canvas = FigureCanvas(self.fig)
+        right_layout.addWidget(self.canvas)
+        
+        splitter.addWidget(right_panel)
+        splitter.setSizes([600, 600])
+
+    def open_file_dialog(self):
+        file_path, _ = QFileDialog.getOpenFileName(self, "Wybierz zdjęcie tkanki", "", "Images (*.png *.jpg *.jpeg *.tif)")
+        if file_path:
+            try:
+                # nazwa pliku pod obrazkiem
+                pure_name = os.path.basename(file_path)
+                self.lbl_file_name.setText(f"Plik: {pure_name}")
+                
+                # obejście błędu dla Polskich znaków
+                pil_raw = Image.open(file_path).convert('RGB')
+                self.orig_cv_img = np.array(pil_raw)
+                self.orig_cv_img = cv2.resize(self.orig_cv_img, (450, 450))
+                
+                self.input_tensor = self.transform(pil_raw).unsqueeze(0).to(DEVICE)
+                self.run_cadx_diagnosis()
+            except Exception as e:
+                print(f"Błąd podczas ładowania pliku: {e}")
+
+    def run_cadx_diagnosis(self):
+        with torch.set_grad_enabled(True):
+            cam_map, outputs = self.cam_engine.generate(self.input_tensor, target_class=0)
+            probs = F.softmax(outputs, dim=1).squeeze(0).detach().cpu().numpy()
+        
+        scaled_probs = [probs[i] / self.thresholds[i] for i in range(9)]
+        final_class = int(np.argmax(scaled_probs))
+        
+        with torch.set_grad_enabled(True):
+            cam_map, _ = self.cam_engine.generate(self.input_tensor, target_class=final_class)
+            
+        heatmap_resized = cv2.resize(cam_map, (450, 450))
+        heatmap_color = cv2.applyColorMap(np.uint8(255 * heatmap_resized), cv2.COLORMAP_JET)
+        self.heatmap_cv_img = cv2.cvtColor(heatmap_color, cv2.COLOR_BGR2RGB)
+        
+        self.alpha_slider.setEnabled(True)
+        self.alpha_slider.setValue(0) 
+        
+        self.update_ui_cards(final_class)
+        self.render_interactive_chart(probs, final_class)
+        self.update_blend_view()
+
+    def update_ui_cards(self, med_class):
+        """ Aktualizuje nagłówki z pełnym kontrastem i dedykowanym kolorem tekstu """
+        class_info = CLASS_MAPPING[med_class]
+        
+        self.lbl_class_title.setText(f"DIAGNOZA: {class_info['name'].upper()} [KLASA {med_class}]")
+        self.lbl_status.setText(f"Status kliniczny: {class_info['status']}")
+        
+        # tło karty
+        if class_info['is_patho']:
+            self.result_frame.setStyleSheet(f"background-color: #fce4d6; border: 2px solid {class_info['color']}; border-radius: 8px;")
+            self.lbl_class_title.setStyleSheet(f"color: {class_info['color']}; font-weight: bold;")
+            self.lbl_status.setStyleSheet("color: #2f3542; font-weight: bold;")
+        else:
+            self.result_frame.setStyleSheet(f"background-color: #e2f0d9; border: 2px solid {class_info['color']}; border-radius: 8px;")
+            self.lbl_class_title.setStyleSheet("color: #27ae60; font-weight: bold;")
+            self.lbl_status.setStyleSheet("color: #2f3542; font-weight: bold;")
+
+    def update_blend_view(self):
+        if self.orig_cv_img is None or self.heatmap_cv_img is None:
+            return
+            
+        alpha = self.alpha_slider.value() / 100.0
+        beta = 1.0 - alpha
+        
+        blended = cv2.addWeighted(self.heatmap_cv_img, alpha, self.orig_cv_img, beta, 0)
+        
+        h, w, ch = blended.shape
+        bytes_per_line = ch * w
+        q_img = QImage(blended.data, w, h, bytes_per_line, QImage.Format.Format_RGB888)
+        self.view_label.setPixmap(QPixmap.fromImage(q_img))
+
+    def render_interactive_chart(self, probabilities, selected_class):
+        self.ax.clear()
+        classes_labels = [f"Klasa {i}" for i in range(9)]
+        percents = probabilities * 100
+        
+        # unikalne kolory słupków
+        colors = [CLASS_MAPPING[i]['color'] for i in range(9)]
+        
+        # pełne nasycenie wygranej klasy
+        bar_alphas = [1.0 if i == selected_class else 0.4 for i in range(9)]
+        
+        bars = self.ax.barh(classes_labels, percents, color=colors, edgecolor='black', height=0.6)
+        
+        # zastosowanie przezroczystości dla wyróżnienia wygranej klasy
+        for idx, bar in enumerate(bars):
+            bar.set_alpha(bar_alphas[idx])
+            
+        self.ax.set_xlim(0, max(percents) + 12)
+        self.ax.set_xlabel("Prawdopodobieństwo surowe (%)", fontweight='bold')
+        self.ax.set_title("Rozkład prawdopodobieństw w sieci neuronowej", fontweight='bold', fontsize=11)
+        self.ax.invert_yaxis()
+        
+        for bar in bars:
+            width = bar.get_width()
+            self.ax.text(width + 1, bar.get_y() + bar.get_height()/2, f'{width:.1f}%', 
+                         va='center', ha='left', fontsize=9, fontweight='bold')
+            
+        self.fig.tight_layout()
+        self.canvas.draw()
+
+if __name__ == "__main__":
+    import sys
+    app = QApplication(sys.argv)
+    app.setStyle('Fusion')
+    gui = MEdicalCADxApp()
+    gui.show()
+    
+    try:
+        sys.exit(app.exec())
+    except SystemExit:
+        print("Zamykanie pętli aplikacji GUI.")
