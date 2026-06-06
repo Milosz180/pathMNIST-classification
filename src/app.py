@@ -10,7 +10,7 @@ from PIL import Image
 from PyQt6.QtWidgets import (QApplication, QMainWindow, QWidget, QPushButton, 
                              QLabel, QFileDialog, QSlider, QVBoxLayout, 
                              QHBoxLayout, QFrame, QSplitter, QMessageBox)
-from PyQt6.QtGui import QPixmap, QImage, QFont, QCursor, QColor
+from PyQt6.QtGui import QPixmap, QImage, QFont, QCursor, QColor, QIcon
 from PyQt6.QtCore import Qt
 import cv2
 import matplotlib.pyplot as plt
@@ -79,12 +79,24 @@ class MEdicalCADxApp(QMainWindow):
     def __init__(self):
         super().__init__()
         self.setWindowTitle("Klasyfikacja PathMNIST") # nazwa okna
-        self.resize(1200, 780)
-        
+        self.resize(1250, 800)
+
         base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
         self.model_path = os.path.join(base_dir, "models", "final_model", "mobilenetv3_final_optimized.pth")
         self.thresholds_path = os.path.join(base_dir, "models", "final_model", "medical_thresholds.json")
-        
+        self.logo_path = os.path.join(base_dir, "logo.png") # logo okna aplikacji
+
+        # wymuszenie wyświetlania własnej ikony na pasku zadań
+        import sys
+        if sys.platform == "win32":
+            import ctypes
+            myappid = "milosz.pathmnist.cadx.1.0"
+            ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(myappid)
+
+        # ikona dla głównego okna aplikacji
+        if os.path.exists(self.logo_path):
+            self.setWindowIcon(QIcon(self.logo_path))
+
         self.orig_cv_img = None
         self.heatmap_cv_img = None
         self.input_tensor = None
@@ -334,6 +346,10 @@ class MEdicalCADxApp(QMainWindow):
     def show_info_modal(self):
         info_box = QMessageBox(self)
         info_box.setWindowTitle("Informacje o aplikacji")
+
+        # ikona aplikacji dla modalnego okna
+        if hasattr(self, 'logo_path') and os.path.exists(self.logo_path):
+            info_box.setWindowIcon(QIcon(self.logo_path))
         
         html_content = """
         <h3>System Wspomagania Diagnostyki Patomorfologicznej</h3>
