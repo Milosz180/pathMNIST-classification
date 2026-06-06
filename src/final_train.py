@@ -5,7 +5,7 @@ import torch.nn as nn
 import torch.optim as optim
 from torch.utils.data import DataLoader
 
-# import global seeda i funkcji ustawiającej
+# import global seed i funkcji z innych modułów
 from src.config import GLOBAL_SEED, set_seed
 from src.models import model_factory
 from src.data_loader import load_and_prepare_data

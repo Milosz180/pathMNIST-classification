@@ -7,3 +7,7 @@ seaborn
 scikit-learn
 scipy
 tqdm
+optuna
+shap
+opencv-python
+PyQt6
