@@ -1,3 +1,4 @@
+## 🇬🇧 English Version
 # PathMNIST CADx — Computer-Aided Pathomorphological Diagnosis System
 
 A desktop CADx (Computer-Aided Diagnosis) application designed for the automated classification of colorectal cancer histopathological tissue slides based on the **PathMNIST** medical dataset. The core of the system is an optimized **MobileNetV3** convolutional neural network developed in **PyTorch**, enhanced with asymmetric decision threshold calibration and an advanced Explainable AI (**XAI**) interpretability layer.
@@ -50,7 +51,7 @@ Before launching the interface, ensure you have **Python >= 3.12** installed on 
 
 
 
-
+## 🇵🇱 Wersja Polska
 # PathMNIST CADx — System Wspomagania Diagnostyki Patomorfologicznej
 
 Aplikacja desktopowa typu CADx (Computer-Aided Diagnosis) służąca do zautomatyzowanej klasyfikacji wycinków histopatologicznych raka jelita grubego na podstawie medycznego zbioru danych **PathMNIST**. Sercem systemu jest zoptymalizowana sieć splotowa **MobileNetV3**, zaprogramowana w środowisku **PyTorch**, wzbogacona o asymetryczną kalibrację progów decyzyjnych oraz zaawansowaną warstwę interpretowalności sztucznej inteligencji (**XAI**).
