@@ -110,7 +110,7 @@ def objective(trial):
 
 def main():
     base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-    output_dir = os.path.join(base_dir, "results", "models/hyperparameters")
+    output_dir = os.path.join(base_dir, "results", "models", "hyperparameters",)
     os.makedirs(output_dir, exist_ok=True)
     
     print("=== URUCHAMIANIE INTELIGENTNEGO TUNINGU (FAZA 2 - MOBILENETV3) ===")
