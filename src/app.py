@@ -162,20 +162,23 @@ class MEdicalCADxApp(QMainWindow):
         
         header_layout = QHBoxLayout()
         self.result_frame = QFrame()
-        self.result_frame.setFrameShape(QFrame.Shape.StyledPanel)
+        self.result_frame.setFrameShape(QFrame.Shape.NoFrame)
         self.result_frame.setStyleSheet("background-color: #f1f2f6; border: 1px solid #ced6e0; border-radius: 8px;")
         rf_layout = QVBoxLayout(self.result_frame)
         
-        # wypisane wyniki diagnozy
         self.lbl_class_title = QLabel("DIAGNOZA: Oczekiwanie na badanie...")
         self.lbl_class_title.setFont(QFont("Arial", 12, QFont.Weight.Bold))
-        self.lbl_class_title.setStyleSheet("color: #2f3542;") 
+        self.lbl_class_title.setLineWidth(0)
+        self.lbl_class_title.setMidLineWidth(0)
+        self.lbl_class_title.setStyleSheet("color: #2f3542; background: transparent; border: 0px solid transparent; border-image: none;")
         self.lbl_class_title.setAlignment(Qt.AlignmentFlag.AlignCenter)
         rf_layout.addWidget(self.lbl_class_title)
         
         self.lbl_status = QLabel("Status kliniczny: -")
         self.lbl_status.setFont(QFont("Arial", 11, QFont.Weight.Medium))
-        self.lbl_status.setStyleSheet("color: #57606f;") 
+        self.lbl_status.setLineWidth(0)
+        self.lbl_status.setMidLineWidth(0)
+        self.lbl_status.setStyleSheet("color: #57606f; background: transparent; border: 0px solid transparent; border-image: none;") 
         self.lbl_status.setAlignment(Qt.AlignmentFlag.AlignCenter)
         rf_layout.addWidget(self.lbl_status)
         
@@ -243,7 +246,7 @@ class MEdicalCADxApp(QMainWindow):
         self.update_blend_view()
 
     def update_ui_cards(self, med_class):
-        # nagłówki z kolorami do klasy
+        # aktualizacja tła
         class_info = CLASS_MAPPING[med_class]
         
         self.lbl_class_title.setText(f"DIAGNOZA: {class_info['name'].upper()} [KLASA {med_class}]")
@@ -251,14 +254,21 @@ class MEdicalCADxApp(QMainWindow):
         
         bg_hex, text_hex = get_auto_colors(class_info['color'])
         
-        # automatyczny generator cieni
         self.result_frame.setStyleSheet(f"""
-            background-color: {bg_hex}; 
-            border: 2px solid {class_info['color']}; 
-            border-radius: 8px;
+            QFrame {{
+                background-color: {bg_hex}; 
+                border: 2px solid {class_info['color']}; 
+                border-radius: 8px;
+            }}
+            QLabel {{
+                border: none;
+                background: transparent;
+                border-image: none;
+            }}
         """)
-        self.lbl_class_title.setStyleSheet(f"color: {text_hex}; font-weight: bold;")
-        self.lbl_status.setStyleSheet(f"color: {text_hex}; font-weight: bold;")
+        
+        self.lbl_class_title.setStyleSheet(f"color: {text_hex}; font-weight: bold; background: transparent; border: none;")
+        self.lbl_status.setStyleSheet(f"color: {text_hex}; font-weight: bold; background: transparent; border: none;")
 
     def update_blend_view(self):
         if self.orig_cv_img is None or self.heatmap_cv_img is None:
@@ -312,12 +322,23 @@ class MEdicalCADxApp(QMainWindow):
         
         html_content = """
         <h3>System Wspomagania Diagnostyki Patomorfologicznej</h3>
-        <p>Aplikacja służy do klasyfikacji wycinków histopatologicznych raka jelita grubego na podstawie zbioru <b>PathMNIST</b>. Sercem systemu jest zoptymalizowana sieć splotowa <b>MobileNetV3</b>.</p>
-        <p><b>Inżynieria medyczna:</b> Ostateczny werdykt nie zależy od surowego maksimum (Argmax), lecz jest kalibrowany asymetrycznie za pomocą matematycznych <b>progów decyzyjnych indeksu Youdena</b>, co minimalizuje ryzyko przeoczenia wczesnych stadiów nowotworowych.</p>
+        <p><b>Autor aplikacji:</b> Miłosz Gronowski</p>
+        <p>Aplikacja służy do klasyfikacji wycinków histopatologicznych raka jelita grubego na podstawie zbioru <b>PathMNIST</b> przy użyciu zoptymalizowanej sieci splotowej <b>MobileNetV3</b> z asymetryczną kalibracją progów decyzyjnych indeksu Youdena.</p>
+        
+        <hr>
+        <h4><b>KRÓTKA INSTRUKCJA OBSŁUGI:</b></h4>
+        <ol>
+            <li><b>Wczytanie obrazu:</b> Kliknij przycisk <i>"Wczytaj obraz histopatologiczny"</i> i wskaż plik biopsyjny (np. z katalogu <code>/samples/</code>). Pod obrazem wyświetli się nazwa analizowanego pliku.</li>
+            <li><b>Interpretacja diagnozy:</b> Górna karta natychmiast wyświetli ostateczny werdykt medyczny wraz z technicznym numerem klasy oraz statusem bezpieczeństwa.</li>
+            <li><b>Czytanie wykresu:</b> Stały wykres po prawej stronie prezentuje surowe prawdopodobieństwa sieci dla wszystkich 9 klas. Słupek klasy zakwalifikowanej jako diagnoza główna jest podświetlony pełnym nasyceniem koloru, ułatwiając szybką ocenę różnicową.</li>
+            <li><b>Suwak przezroczystości (Alpha Blending):</b> Przesuwaj suwak pod zdjęciem tkanki w prawo, aby płynnie nałożyć mapę aktywacji sieci <b>Grad-CAM</b>. Pozwala to dokładnie zweryfikować, jakie konkretne struktury komórkowe wywołały alarm modelu.</li>
+        </ol>
+        
         <hr>
         <h4><b>SŁOWNIK I LEGENDA KLAS HISTOPATOLOGICZNYCH:</b></h4>
-        <table border="0" cellpadding="3">
+        <table border="0" cellpadding="2">
         """
+        # Dynamiczne generowanie legendy klas
         for k, v in CLASS_MAPPING.items():
             patho_tag = "<b style='color:#c0392b;'>[PATOLOGIA]</b>" if v['is_patho'] else "<b style='color:#27ae60;'>[NORMA]</b>"
             html_content += f"""
@@ -329,12 +350,37 @@ class MEdicalCADxApp(QMainWindow):
             """
         html_content += """
         </table>
-        <br>
-        <p><small><i>Suwak Alpha Blending pod obrazem pozwala na płynne nałożenie mapy uwagi Grad-CAM na oryginalny preparat barwiony hematoksyliną i eozyną (H&E).</i></small></p>
         """
+        
         info_box.setText(html_content)
         info_box.setTextFormat(Qt.TextFormat.RichText)
         info_box.setStandardButtons(QMessageBox.StandardButton.Ok)
+        ok_button = info_box.button(QMessageBox.StandardButton.Ok)
+        ok_button.setFont(QFont("Arial", 10, QFont.Weight.Bold))
+        ok_button.setCursor(QCursor(Qt.CursorShape.PointingHandCursor))
+        ok_button.setMinimumSize(90, 35)
+        ok_button.setStyleSheet("""
+            QPushButton {
+                background-color: #2980b9;
+                color: white;
+                border-radius: 6px;
+                border: 1px solid #2471a3;
+                padding-left: 15px;
+                padding-right: 15px;
+            }
+            QPushButton:hover {
+                background-color: #3498db;
+            }
+        """)
+        info_box.setStyleSheet("""
+            QMessageBox {
+                dialogbuttonbox-buttons-have-icons: 0;
+            }
+            QDialogButtonBox {
+                button-layout: 0; /* Wymuszenie symetrycznego układu środkowego */
+                alignment: center;
+            }
+        """)
         info_box.exec()
 
 if __name__ == "__main__":
