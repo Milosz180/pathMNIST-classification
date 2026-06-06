@@ -115,7 +115,13 @@ def main():
         best_idx = np.argmax(youden_index)
         best_thresholds[i] = thresholds[best_idx]
         print(f"Klasa {i} -> Optymalny próg prawdopodobieństwa (Youden): {best_thresholds[i]:.4f} (AUC: {roc_auc:.4f})")
-        
+    
+    # zapisanie progów z indeksem Youdena dla GUI i interpretowalności
+    thresholds_json_path = os.path.join(base_dir, "models", "final_model", "medical_thresholds.json")
+    with open(thresholds_json_path, "w") as f:
+        json.dump(best_thresholds, f, indent=4)
+    print(f"[SYSTEM] Matematyczne progi Youdena zostały bezpiecznie zapisane w: {thresholds_json_path}")
+
     plt.plot([0, 1], [0, 1], 'k--', linewidth=1.5, label='Klasyfikator losowy (AUC = 0.5000)')
     plt.xlim([0.0, 1.0]); plt.ylim([0.0, 1.05]); plt.xlabel('False Positive Rate (1 - Specyficzność)'); plt.ylabel('True Positive Rate (Czułość / Recall)')
     plt.title('Krzywe ROC (Receiver Operating Characteristic) - MobileNetV3', fontsize=13, fontweight='bold', pad=12); plt.legend(loc="lower right"); plt.grid(True, linestyle=":", alpha=0.6); plt.tight_layout()
