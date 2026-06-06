@@ -182,6 +182,9 @@ class MEdicalCADxApp(QMainWindow):
         self.lbl_status.setAlignment(Qt.AlignmentFlag.AlignCenter)
         rf_layout.addWidget(self.lbl_status)
         
+        self.lbl_class_title.setWordWrap(True)
+        self.lbl_status.setWordWrap(True)
+
         header_layout.addWidget(self.result_frame, stretch=5)
         
         # przycisk INFO
@@ -206,14 +209,26 @@ class MEdicalCADxApp(QMainWindow):
         splitter.setSizes([600, 600])
 
     def open_file_dialog(self):
-        file_path, _ = QFileDialog.getOpenFileName(self, "Wybierz zdjęcie tkanki", "", "Images (*.png *.jpg *.jpeg *.tif)")
+        base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        samples_dir = os.path.join(base_dir, "samples")
+        
+        # jeśli folder /samples nie istnieje, zaczynamy w głównym katalogu projektu
+        if not os.path.exists(samples_dir):
+            samples_dir = base_dir
+            
+        # otwarcie okna dialogowego w wyznaczonym folderze startowym
+        file_path, _ = QFileDialog.getOpenFileName(
+            self, 
+            "Wybierz zdjęcie tkanki", 
+            samples_dir,
+            "Images (*.png *.jpg *.jpeg *.tif)"
+        )
+        
         if file_path:
             try:
-                # nazwa pliku pod obrazkiem
                 pure_name = os.path.basename(file_path)
                 self.lbl_file_name.setText(f"Plik: {pure_name}")
                 
-                # obejście błędu dla Polskich znaków
                 pil_raw = Image.open(file_path).convert('RGB')
                 self.orig_cv_img = np.array(pil_raw)
                 self.orig_cv_img = cv2.resize(self.orig_cv_img, (450, 450))
@@ -286,7 +301,7 @@ class MEdicalCADxApp(QMainWindow):
 
     def render_interactive_chart(self, probabilities, selected_class):
         self.ax.clear()
-        classes_labels = [f"Klasa {i}" for i in range(9)]
+        classes_labels = [f"[Klasa {i}] {CLASS_MAPPING[i]['short']}" for i in range(9)]
         percents = probabilities * 100
         
         # unikalne kolory słupków
@@ -301,10 +316,10 @@ class MEdicalCADxApp(QMainWindow):
         for idx, bar in enumerate(bars):
             bar.set_alpha(bar_alphas[idx])
             
-        self.ax.set_xlim(0, max(percents) + 12)
+        self.ax.set_xlim(0, max(percents) + 15)
         self.ax.set_xlabel("Prawdopodobieństwo surowe (%)", fontweight='bold')
         self.ax.set_title("Rozkład prawdopodobieństw w sieci neuronowej", fontweight='bold', fontsize=11)
-        self.ax.tick_params(axis='y', labelsize=9)
+        self.ax.tick_params(axis='y', labelsize=8.5)
         self.ax.invert_yaxis()
         
         for bar in bars:
