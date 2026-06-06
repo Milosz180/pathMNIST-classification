@@ -9,8 +9,8 @@ from PIL import Image
 # import biblioteki PyQt6
 from PyQt6.QtWidgets import (QApplication, QMainWindow, QWidget, QPushButton, 
                              QLabel, QFileDialog, QSlider, QVBoxLayout, 
-                             QHBoxLayout, QFrame, QSplitter)
-from PyQt6.QtGui import QPixmap, QImage, QFont, QCursor
+                             QHBoxLayout, QFrame, QSplitter, QMessageBox)
+from PyQt6.QtGui import QPixmap, QImage, QFont, QCursor, QColor
 from PyQt6.QtCore import Qt
 import cv2
 import matplotlib.pyplot as plt
@@ -23,16 +23,24 @@ DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 # słownik mapowania klas - każda klasa posiada własny kolor
 CLASS_MAPPING = {
-    0: {"name": "Tkanka tłuszczowa (Adipose)", "status": "Prawidłowa / Bez zmian", "color": "#27ae60", "is_patho": False}, # Ciemna zieleń
-    1: {"name": "Tło preparatu (Background)", "status": "Neutralny", "color": "#7f8c8d", "is_patho": False},  # Szary
-    2: {"name": "Gęste podścielisko nowotworowe (Cancer-associated stroma)", "status": "PATOLOGIA / ALARM", "color": "#d35400", "is_patho": True}, # Ciemny pomarańcz
-    3: {"name": "Nacieki limfocytarne (Lymphocytes)", "status": "PATOLOGIA / MONITORUJ", "color": "#8e44ad", "is_patho": True}, # Fiolet
-    4: {"name": "Gruczoły jelitowe prawidłowe (Mucosa)", "status": "Prawidłowa / Bez zmian", "color": "#2ecc71", "is_patho": False}, # Jasna zieleń
-    5: {"name": "Gruczolak / Rak gruczołowy (Adenocarcinoma)", "status": "KRYTYCZNY / NOWOTWÓR", "color": "#c0392b", "is_patho": True}, # Intensywna czerwień
-    6: {"name": "Tkanka limfoidalna (Lymphoid tissue)", "status": "Prawidłowa / Bez zmian", "color": "#16a085", "is_patho": False}, # Morska zieleń
-    7: {"name": "Mięśniówka gładka (Smooth muscle)", "status": "Prawidłowa / Bez zmian", "color": "#2980b9", "is_patho": False}, # Niebieski
-    8: {"name": "Prawidłowa śluzówka jelita (Normal colon mucosa)", "status": "Prawidłowa / Bez zmian", "color": "#1abc9c", "is_patho": False} # Turkus
+    0: {"name": "Tkanka tłuszczowa (Adipose)", "short": "Tkanka tłuszczowa", "status": "Prawidłowa / Bez zmian", "color": "#27ae60", "is_patho": False}, # Żywa zieleń
+    1: {"name": "Tło preparatu (Background)", "short": "Tło preparatu", "status": "Neutralny", "color": "#7f8c8d", "is_patho": False},             # Neutralny szary
+    2: {"name": "Gęste podścielisko nowotworowe (Stroma)", "short": "Podścielisko nowotw.", "status": "PATOLOGIA / ALARM", "color": "#e67e22", "is_patho": True}, # Pomarańczowy
+    3: {"name": "Nacieki limfocytarne (Lymphocytes)", "short": "Nacieki limfocyt.", "status": "PATOLOGIA / MONITORUJ", "color": "#9b59b6", "is_patho": True},   # Wyrazisty fiolet
+    4: {"name": "Gruczoły jelitowe prawidłowe (Mucosa)", "short": "Gruczoły prawidłowe", "status": "Prawidłowa / Bez zmian", "color": "#1abc9c", "is_patho": False}, # Turkusowy
+    5: {"name": "Gruczolak / Rak gruczołowy (Adenocarcinoma)", "short": "Rak gruczołowy", "status": "KRYTYCZNY / NOWOTWÓR", "color": "#c0392b", "is_patho": True}, # Intensywna czerwień
+    6: {"name": "Tkanka limfoidalna (Lymphoid tissue)", "short": "Tkanka limfoidalna", "status": "Prawidłowa / Bez zmian", "color": "#006699", "is_patho": False}, # Głęboki błękit
+    7: {"name": "Mięśniówka gładka (Smooth muscle)", "short": "Mięśniówka gładka", "status": "Prawidłowa / Bez zmian", "color": "#f1c40f", "is_patho": False},    # Jaskrawy żółty
+    8: {"name": "Prawidłowa śluzówka jelita (Normal mucosa)", "short": "Śluzówka prawidłowa", "status": "Prawidłowa / Bez zmian", "color": "#d81b60", "is_patho": False} # Karminowy/Róż
 }
+
+# funckja do automatycznego obliczania odcieni tła i czcionki
+def get_auto_colors(hex_color):
+    color = QColor(hex_color)
+    h, s, v, a = color.getHsv()
+    bg_color = QColor.fromHsv(h, int(s * 0.12), int(255 * 0.97)) # pastel jasny
+    text_color = QColor.fromHsv(h, int(s * 1.0), int(255 * 0.35)) # ciemny kontrast
+    return bg_color.name(), text_color.name()
 
 # klasa silnika Grad-CAM
 class GradCAMEngine:
@@ -110,7 +118,7 @@ class MEdicalCADxApp(QMainWindow):
         splitter = QSplitter(Qt.Orientation.Horizontal)
         main_layout.addWidget(splitter)
         
-        # panel lewy -przycisk, wczytywany obraz, nazwa pliku i suwak
+        # panel lewy - przycisk, wczytywany obraz, nazwa pliku i suwak
         left_panel = QWidget()
         left_layout = QVBoxLayout(left_panel)
         
@@ -124,7 +132,7 @@ class MEdicalCADxApp(QMainWindow):
         self.view_label = QLabel("Proszę wczytać zdjęcie tkanki bioptatu...")
         self.view_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.view_label.setFrameStyle(QFrame.Shape.StyledPanel | QFrame.Shadow.Sunken)
-        self.view_label.setMinimumSize(400, 400)
+        self.view_label.setMinimumSize(450, 450)
         left_layout.addWidget(self.view_label)
         
         # nazwa wczytywanego pliku
@@ -152,14 +160,15 @@ class MEdicalCADxApp(QMainWindow):
         right_panel = QWidget()
         right_layout = QVBoxLayout(right_panel)
         
+        header_layout = QHBoxLayout()
         self.result_frame = QFrame()
         self.result_frame.setFrameShape(QFrame.Shape.StyledPanel)
         self.result_frame.setStyleSheet("background-color: #f1f2f6; border: 1px solid #ced6e0; border-radius: 8px;")
         rf_layout = QVBoxLayout(self.result_frame)
         
-        # ciemniejszy kolor
+        # wypisane wyniki diagnozy
         self.lbl_class_title = QLabel("DIAGNOZA: Oczekiwanie na badanie...")
-        self.lbl_class_title.setFont(QFont("Arial", 13, QFont.Weight.Bold))
+        self.lbl_class_title.setFont(QFont("Arial", 12, QFont.Weight.Bold))
         self.lbl_class_title.setStyleSheet("color: #2f3542;") 
         self.lbl_class_title.setAlignment(Qt.AlignmentFlag.AlignCenter)
         rf_layout.addWidget(self.lbl_class_title)
@@ -170,8 +179,22 @@ class MEdicalCADxApp(QMainWindow):
         self.lbl_status.setAlignment(Qt.AlignmentFlag.AlignCenter)
         rf_layout.addWidget(self.lbl_status)
         
-        right_layout.addWidget(self.result_frame)
+        header_layout.addWidget(self.result_frame, stretch=5)
         
+        # przycisk INFO
+        self.btn_info = QPushButton("i")
+        self.btn_info.setFont(QFont("Georgia", 16, QFont.Weight.Bold))
+        self.btn_info.setFixedSize(45, 60)
+        self.btn_info.setCursor(QCursor(Qt.CursorShape.PointingHandCursor))
+        self.btn_info.setStyleSheet("""
+            QPushButton { background-color: #2980b9; color: white; border-radius: 8px; border: 1px solid #2471a3; }
+            QPushButton:hover { background-color: #3498db; }
+        """)
+        self.btn_info.clicked.connect(self.show_info_modal)
+        header_layout.addWidget(self.btn_info, stretch=0)
+        
+        right_layout.addLayout(header_layout)
+
         self.fig, self.ax = plt.subplots(figsize=(5, 5), dpi=100)
         self.canvas = FigureCanvas(self.fig)
         right_layout.addWidget(self.canvas)
@@ -220,21 +243,22 @@ class MEdicalCADxApp(QMainWindow):
         self.update_blend_view()
 
     def update_ui_cards(self, med_class):
-        """ Aktualizuje nagłówki z pełnym kontrastem i dedykowanym kolorem tekstu """
+        # nagłówki z kolorami do klasy
         class_info = CLASS_MAPPING[med_class]
         
         self.lbl_class_title.setText(f"DIAGNOZA: {class_info['name'].upper()} [KLASA {med_class}]")
         self.lbl_status.setText(f"Status kliniczny: {class_info['status']}")
         
-        # tło karty
-        if class_info['is_patho']:
-            self.result_frame.setStyleSheet(f"background-color: #fce4d6; border: 2px solid {class_info['color']}; border-radius: 8px;")
-            self.lbl_class_title.setStyleSheet(f"color: {class_info['color']}; font-weight: bold;")
-            self.lbl_status.setStyleSheet("color: #2f3542; font-weight: bold;")
-        else:
-            self.result_frame.setStyleSheet(f"background-color: #e2f0d9; border: 2px solid {class_info['color']}; border-radius: 8px;")
-            self.lbl_class_title.setStyleSheet("color: #27ae60; font-weight: bold;")
-            self.lbl_status.setStyleSheet("color: #2f3542; font-weight: bold;")
+        bg_hex, text_hex = get_auto_colors(class_info['color'])
+        
+        # automatyczny generator cieni
+        self.result_frame.setStyleSheet(f"""
+            background-color: {bg_hex}; 
+            border: 2px solid {class_info['color']}; 
+            border-radius: 8px;
+        """)
+        self.lbl_class_title.setStyleSheet(f"color: {text_hex}; font-weight: bold;")
+        self.lbl_status.setStyleSheet(f"color: {text_hex}; font-weight: bold;")
 
     def update_blend_view(self):
         if self.orig_cv_img is None or self.heatmap_cv_img is None:
@@ -261,7 +285,7 @@ class MEdicalCADxApp(QMainWindow):
         # pełne nasycenie wygranej klasy
         bar_alphas = [1.0 if i == selected_class else 0.4 for i in range(9)]
         
-        bars = self.ax.barh(classes_labels, percents, color=colors, edgecolor='black', height=0.6)
+        bars = self.ax.barh(classes_labels, percents, color=colors, edgecolor='black', height=0.6)        
         
         # zastosowanie przezroczystości dla wyróżnienia wygranej klasy
         for idx, bar in enumerate(bars):
@@ -270,6 +294,7 @@ class MEdicalCADxApp(QMainWindow):
         self.ax.set_xlim(0, max(percents) + 12)
         self.ax.set_xlabel("Prawdopodobieństwo surowe (%)", fontweight='bold')
         self.ax.set_title("Rozkład prawdopodobieństw w sieci neuronowej", fontweight='bold', fontsize=11)
+        self.ax.tick_params(axis='y', labelsize=9)
         self.ax.invert_yaxis()
         
         for bar in bars:
@@ -279,6 +304,38 @@ class MEdicalCADxApp(QMainWindow):
             
         self.fig.tight_layout()
         self.canvas.draw()
+
+    # funkcja modalnego INFO
+    def show_info_modal(self):
+        info_box = QMessageBox(self)
+        info_box.setWindowTitle("Informacje o aplikacji")
+        
+        html_content = """
+        <h3>System Wspomagania Diagnostyki Patomorfologicznej</h3>
+        <p>Aplikacja służy do klasyfikacji wycinków histopatologicznych raka jelita grubego na podstawie zbioru <b>PathMNIST</b>. Sercem systemu jest zoptymalizowana sieć splotowa <b>MobileNetV3</b>.</p>
+        <p><b>Inżynieria medyczna:</b> Ostateczny werdykt nie zależy od surowego maksimum (Argmax), lecz jest kalibrowany asymetrycznie za pomocą matematycznych <b>progów decyzyjnych indeksu Youdena</b>, co minimalizuje ryzyko przeoczenia wczesnych stadiów nowotworowych.</p>
+        <hr>
+        <h4><b>SŁOWNIK I LEGENDA KLAS HISTOPATOLOGICZNYCH:</b></h4>
+        <table border="0" cellpadding="3">
+        """
+        for k, v in CLASS_MAPPING.items():
+            patho_tag = "<b style='color:#c0392b;'>[PATOLOGIA]</b>" if v['is_patho'] else "<b style='color:#27ae60;'>[NORMA]</b>"
+            html_content += f"""
+            <tr>
+                <td><span style='color:{v['color']}; font-size:14px;'>■</span> <b>Klasa {k}:</b></td>
+                <td>{v['name']}</td>
+                <td>{patho_tag}</td>
+            </tr>
+            """
+        html_content += """
+        </table>
+        <br>
+        <p><small><i>Suwak Alpha Blending pod obrazem pozwala na płynne nałożenie mapy uwagi Grad-CAM na oryginalny preparat barwiony hematoksyliną i eozyną (H&E).</i></small></p>
+        """
+        info_box.setText(html_content)
+        info_box.setTextFormat(Qt.TextFormat.RichText)
+        info_box.setStandardButtons(QMessageBox.StandardButton.Ok)
+        info_box.exec()
 
 if __name__ == "__main__":
     import sys
